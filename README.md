@@ -7,6 +7,7 @@ Tên "Capcap": **cap** = capture (quay/chụp màn hình), lặp lại **cap cap
 ## Tính năng
 
 - **4 chế độ quay**: Toàn màn hình, Toàn màn hình (ẩn taskbar), Chọn vùng (kéo chuột), Dọc 9:16 bám theo con trỏ chuột.
+- **Chụp màn hình tăng tốc GPU** (DXGI Desktop Duplication) — mượt ở 60fps kể cả full màn hình độ phân giải cao; tự động lùi về chụp thường (GDI) nếu máy không hỗ trợ.
 - **Con trỏ chuột thật**: vẽ đúng hình dạng và kích thước con trỏ đang hiển thị thật trên máy (lấy trực tiếp từ Windows, không phải overlay giả theo tọa độ), có tùy chọn phóng to 1x/1.5x/2x/3x để dễ nhìn hơn trong video.
 - **File xuất ra rất nhẹ**: encode H.264 qua ffmpeg pipe trực tiếp, không ghi file tạm dạng raw.
 - **Âm thanh hiệu ứng khi click / gõ phím / cuộn chuột** (tùy chọn, bật mặc định) — tổng hợp tick nhân tạo, không thu mic.
@@ -27,6 +28,10 @@ Tên "Capcap": **cap** = capture (quay/chụp màn hình), lặp lại **cap cap
 | Bấm đúp vào icon khay hệ thống | Bắt đầu / dừng quay (dự phòng nếu phím tắt bị app khác chiếm) |
 
 > Các phím tắt trên chiếm dụng toàn hệ thống khi app đang chạy (ví dụ Ctrl+Home/Ctrl+End vốn là "về đầu/cuối văn bản" ở nhiều app khác). Nếu bị xung đột với công cụ khác trên máy (AutoHotkey, bộ gõ tiếng Việt...), dùng cách bấm đúp icon khay hệ thống thay thế.
+
+## Tải về
+
+Không muốn build từ mã nguồn? Tải bản build sẵn ở [Releases](https://github.com/hiimmaxx7/capcap/releases) — giải nén và chạy `Capcap.exe`.
 
 ## Yêu cầu hệ thống
 
@@ -59,6 +64,7 @@ File chạy sau khi build: `bin\Release\net48\Capcap.exe` (kèm vài DLL của N
 | `CursorPainter.cs` | Vẽ con trỏ chuột thật (đúng hình dạng, kích thước theo DPI) |
 | `InputSoundLogger.cs` / `WavBuilder.cs` | Ghi lại thời điểm click/phím/cuộn và tổng hợp track hiệu ứng âm thanh |
 | `SystemAudioCapture.cs` | Ghi âm thanh hệ thống qua WASAPI loopback (NAudio) |
+| `DxgiScreenCapture.cs` | Chụp màn hình tăng tốc GPU qua DXGI Desktop Duplication |
 | `RegionSelectForm.cs` / `ConfirmStartForm.cs` / `CountdownOverlayForm.cs` / `SaveDiscardForm.cs` | Các popup UI trong luồng quay theo vùng |
 | `BorderOverlayForm.cs` | Khung viền báo vùng đang quay |
 | `NativeMethods.cs` / `HotkeyWindow.cs` | P/Invoke Win32 API và cửa sổ ẩn nhận hotkey toàn cục |

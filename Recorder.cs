@@ -62,6 +62,10 @@ internal sealed class Recorder
     private Size _cursorTargetSize = new(32, 32);
     private double _frameIntervalSec = 1.0 / 60;
 
+    private DxgiScreenCapture? _dxgiCapture;
+    private bool _useDxgi;
+    private int _bytesPerPixel = 3;
+
     private double _followCropLeft;
 
     private volatile bool _firstFrameSeen;
@@ -133,7 +137,25 @@ internal sealed class Recorder
             _outputSize = _fixedGrabRect.Size;
         }
 
-        _frameByteCount = _outputSize.Width * 3 * _outputSize.Height;
+        // Try GPU-accelerated capture first — GDI's CopyFromScreen cost scales with the
+        // captured area and can't reliably sustain 60fps at full 1080p+ on some hardware.
+        // Falls back to GDI transparently if DXGI can't be initialized for this monitor
+        // (e.g. no compatible adapter, or a virtualized/remote display with no real GPU output).
+        try
+        {
+            _dxgiCapture?.Dispose();
+            _dxgiCapture = new DxgiScreenCapture(startScreen.Bounds);
+            _useDxgi = true;
+            _bytesPerPixel = 4;
+        }
+        catch
+        {
+            _dxgiCapture = null;
+            _useDxgi = false;
+            _bytesPerPixel = 3;
+        }
+
+        _frameByteCount = _outputSize.Width * _bytesPerPixel * _outputSize.Height;
         _frameQueue = new BlockingCollection<byte[]>(QueueCapacity);
         _bufferPool = new ConcurrentBag<byte[]>();
 
@@ -144,7 +166,7 @@ internal sealed class Recorder
         _tempSystemAudioPath = Path.Combine(opts.OutputFolder, $"_tmpsys_{stamp}.wav");
         LastOutputPath = Path.Combine(opts.OutputFolder, $"capcap_{stamp}.mp4");
 
-        StartFfmpeg(_outputSize, opts.Fps, opts.Crf, _tempVideoPath);
+        StartFfmpeg(_outputSize, opts.Fps, opts.Crf, _tempVideoPath, _useDxgi ? "bgra" : "bgr24");
 
         _clock.Restart();
 
@@ -226,6 +248,8 @@ internal sealed class Recorder
         _soundLogger = null;
         _systemAudioCapture?.Dispose();
         _systemAudioCapture = null;
+        _dxgiCapture?.Dispose();
+        _dxgiCapture = null;
         _ffmpeg?.Dispose();
         _ffmpeg = null;
         _ffmpegStdin = null;
@@ -265,8 +289,9 @@ internal sealed class Recorder
         var frameTimer = Stopwatch.StartNew();
         long framesSent = 0;
 
-        using var frameBmp = new Bitmap(_outputSize.Width, _outputSize.Height, PixelFormat.Format24bppRgb);
-        using var frameGfx = Graphics.FromImage(frameBmp);
+        // GDI fallback path only — unused (but harmless to allocate) when DXGI is active.
+        using var frameBmp = _useDxgi ? null : new Bitmap(_outputSize.Width, _outputSize.Height, PixelFormat.Format24bppRgb);
+        using var frameGfx = frameBmp is null ? null : Graphics.FromImage(frameBmp);
 
         while (!_stopRequested)
         {
@@ -291,8 +316,19 @@ internal sealed class Recorder
 
             try
             {
-                frameGfx.CopyFromScreen(grabOrigin, Point.Empty, _outputSize, CopyPixelOperation.SourceCopy);
-                CursorPainter.DrawCursorOnFrame(frameGfx, grabOrigin, _cursorTargetSize);
+                byte[] buffer = RentBuffer();
+
+                if (_useDxgi)
+                {
+                    _dxgiCapture!.CaptureRegion(new Rectangle(grabOrigin, _outputSize), buffer);
+                    DrawCursorOntoBuffer(buffer, grabOrigin);
+                }
+                else
+                {
+                    frameGfx!.CopyFromScreen(grabOrigin, Point.Empty, _outputSize, CopyPixelOperation.SourceCopy);
+                    CursorPainter.DrawCursorOnFrame(frameGfx, grabOrigin, _cursorTargetSize);
+                    CopyBitmapToBuffer(frameBmp!, buffer);
+                }
 
                 if (!_firstFrameSeen)
                 {
@@ -304,8 +340,6 @@ internal sealed class Recorder
                     _firstFrameOffsetSec = _clock.Elapsed.TotalSeconds;
                 }
 
-                byte[] buffer = RentBuffer();
-                CopyBitmapToBuffer(frameBmp, buffer);
                 EnqueueFrame(buffer);
                 framesSent++;
 
@@ -414,6 +448,25 @@ internal sealed class Recorder
         return new Point(x, _screenClampBounds.Top);
     }
 
+    /// <summary>Composites the real cursor directly into a tightly-packed BGRA32 buffer
+    /// (the DXGI capture path) by pinning it and viewing it as a GDI bitmap in place —
+    /// reuses <see cref="CursorPainter"/> as-is instead of a separate D3D-based renderer.</summary>
+    private void DrawCursorOntoBuffer(byte[] buffer, Point frameOrigin)
+    {
+        var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        try
+        {
+            using var bmp = new Bitmap(_outputSize.Width, _outputSize.Height, _outputSize.Width * 4,
+                PixelFormat.Format32bppRgb, handle.AddrOfPinnedObject());
+            using var g = Graphics.FromImage(bmp);
+            CursorPainter.DrawCursorOnFrame(g, frameOrigin, _cursorTargetSize);
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
     private static void CopyBitmapToBuffer(Bitmap bmp, byte[] dest)
     {
         var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
@@ -440,12 +493,12 @@ internal sealed class Recorder
         }
     }
 
-    private void StartFfmpeg(Size size, int fps, int crf, string outputPath)
+    private void StartFfmpeg(Size size, int fps, int crf, string outputPath, string pixFmt)
     {
         var psi = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-y -f rawvideo -pix_fmt bgr24 -s {size.Width}x{size.Height} -r {fps} -i - " +
+            Arguments = $"-y -f rawvideo -pix_fmt {pixFmt} -s {size.Width}x{size.Height} -r {fps} -i - " +
                         $"-an -c:v libx264 -preset ultrafast -tune zerolatency -crf {crf} -pix_fmt yuv420p -movflags +faststart \"{outputPath}\"",
             RedirectStandardInput = true,
             RedirectStandardError = false,
