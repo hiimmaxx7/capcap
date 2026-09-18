@@ -2,21 +2,13 @@
 
 Tool quay màn hình siêu nhẹ cho Windows, chạy dạng icon khay hệ thống (system tray). Dùng ffmpeg có sẵn trên máy để encode. Chạy trên .NET Framework 4.8 — đã có sẵn trên mọi máy Windows 10/11, không cần cài thêm runtime.
 
-Tên "Capcap": **cap** = capture (quay/chụp màn hình), lặp lại **cap cap** nghe như tiếng vịt kêu "cạp cạp" — khớp với icon Psyduck của app.
-
 ## Tính năng
 
 - **4 chế độ quay**: Toàn màn hình, Toàn màn hình (ẩn taskbar), Chọn vùng (kéo chuột), Dọc 9:16 bám theo con trỏ chuột.
-- **Chụp màn hình tăng tốc GPU** (DXGI Desktop Duplication) — mượt ở 60fps kể cả full màn hình độ phân giải cao; tự động lùi về chụp thường (GDI) nếu máy không hỗ trợ.
-- **Con trỏ chuột thật**: vẽ đúng hình dạng và kích thước con trỏ đang hiển thị thật trên máy (lấy trực tiếp từ Windows, không phải overlay giả theo tọa độ), có tùy chọn phóng to 1x/1.5x/2x/3x để dễ nhìn hơn trong video.
-- **File xuất ra rất nhẹ**: encode H.264 qua ffmpeg pipe trực tiếp, không ghi file tạm dạng raw.
-- **Âm thanh hiệu ứng khi click / gõ phím / cuộn chuột** (tùy chọn, bật mặc định) — tổng hợp tick nhân tạo, không thu mic.
-- **Ghi âm thanh hệ thống** (tùy chọn, tắt mặc định) — thu những gì đang phát qua loa máy (WASAPI loopback), trộn cùng track hiệu ứng nếu cả hai cùng bật.
-- **Khung viền báo vùng đang quay** (trừ chế độ Toàn màn hình) — không lọt vào video nhờ `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`.
-- **Đếm ngược 3-2-1** trước khi quay theo vùng đã chọn, có popup xác nhận trước.
-- **Tạm dừng / tiếp tục quay** không mất đồng bộ âm thanh.
-- **Hỏi Lưu / Xóa** sau khi dừng quay.
-- Chỉ chạy **một instance** cùng lúc (tự phát hiện nếu app đã chạy rồi).
+- **Chụp màn hình tăng tốc GPU** (DXGI) — mượt ở 60fps kể cả full màn hình độ phân giải cao.
+- **Con trỏ chuột thật** — đúng hình dạng và kích thước như hiển thị thật, có thể phóng to 1x–3x.
+- **File xuất ra rất nhẹ** — encode H.264 qua ffmpeg pipe trực tiếp.
+- **Âm thanh hiệu ứng click / gõ phím / cuộn chuột** (bật mặc định) và **âm thanh hệ thống** (tùy chọn).
 
 ## Phím tắt
 
@@ -36,7 +28,7 @@ Không muốn build từ mã nguồn? Tải bản build sẵn ở [Releases](htt
 ## Yêu cầu hệ thống
 
 - Windows 10/11 (đã có sẵn .NET Framework 4.8 — không cần cài thêm gì để chạy).
-- `ffmpeg` có trong `PATH` hệ thống.
+- `ffmpeg` có trong `PATH` hệ thống — nếu chưa có, chạy `install-ffmpeg.bat` đi kèm để tự tải và thêm vào PATH cho bạn.
 - Để build từ mã nguồn: .NET SDK (bản mới, dùng để build target `net48`).
 
 ## Build từ mã nguồn
@@ -47,12 +39,13 @@ dotnet build -c Release
 
 File chạy sau khi build: `bin\Release\net48\Capcap.exe` (kèm vài DLL của NAudio cho tính năng ghi âm thanh hệ thống — copy cả thư mục khi phân phối, không chỉ mỗi file .exe).
 
-## Sử dụng
+## Hướng dẫn sử dụng
 
-1. Chạy `Capcap.exe`, icon xuất hiện ở khay hệ thống (góc phải taskbar).
-2. Chuột phải vào icon để chọn chế độ quay, FPS (30/60), cỡ con trỏ, bật/tắt âm thanh hiệu ứng và âm thanh hệ thống.
-3. `Ctrl+Home` để bắt đầu, `Ctrl+End` để dừng — sau khi dừng sẽ hỏi Lưu hay Xóa video.
-4. Video lưu tại `Videos\capcap` trong thư mục người dùng, tên file dạng `capcap_yyyyMMdd_HHmmss.mp4` (menu có mục "Mở thư mục lưu video").
+1. Nếu chưa có ffmpeg, chạy `install-ffmpeg.bat` một lần (tự tải và thêm vào PATH), sau đó khởi động lại `Capcap.exe`.
+2. Chạy `Capcap.exe`, icon xuất hiện ở khay hệ thống (góc phải taskbar).
+3. Chuột phải vào icon để chọn chế độ quay, FPS (30/60), cỡ con trỏ, bật/tắt âm thanh hiệu ứng và âm thanh hệ thống.
+4. `Ctrl+Home` để bắt đầu, `Ctrl+End` để dừng — sau khi dừng sẽ hỏi Lưu hay Xóa video.
+5. Video lưu tại `Videos\capcap` trong thư mục người dùng, tên file dạng `capcap_yyyyMMdd_HHmmss.mp4` (menu có mục "Mở thư mục lưu video").
 
 ## Cấu trúc mã nguồn
 
