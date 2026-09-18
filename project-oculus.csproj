@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <AssemblyName>Oculus</AssemblyName>
     <RootNamespace>Oculus</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
