@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace Oculus;
+namespace Capcap;
 
 internal sealed class TrayApplicationContext : ApplicationContext
 {
@@ -19,10 +19,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly Dictionary<double, ToolStripMenuItem> _cursorScaleItems = new();
     private ToolStripMenuItem _toggleItem = null!;
     private ToolStripMenuItem _soundItem = null!;
+    private ToolStripMenuItem _systemAudioItem = null!;
 
     private CaptureMode _selectedMode = CaptureMode.FullScreen;
     private int _selectedFps = 60;
     private bool _soundsEnabled = true;
+    private bool _systemAudioEnabled = false;
     private double _cursorScale = 2.0;
     private Rectangle? _lastRegion;
 
@@ -61,7 +63,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             if (!okStart) failed.Add("Ctrl+Home");
             if (!okStop) failed.Add("Ctrl+End");
             if (!okPause) failed.Add("Ctrl+P");
-            _trayIcon.ShowBalloonTip(4000, "Project Oculus",
+            _trayIcon.ShowBalloonTip(4000, "Capcap",
                 $"Không đăng ký được phím tắt: {string.Join(", ", failed)} (có thể đã bị app khác dùng). " +
                 "Bạn vẫn có thể bấm đúp vào icon này để bắt đầu/dừng quay, hoặc dùng menu chuột phải.",
                 ToolTipIcon.Warning);
@@ -100,6 +102,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _soundItem = new ToolStripMenuItem("Âm thanh khi click / gõ phím") { CheckOnClick = true, Checked = _soundsEnabled };
         _soundItem.Click += (_, _) => _soundsEnabled = _soundItem.Checked;
         menu.Items.Add(_soundItem);
+
+        _systemAudioItem = new ToolStripMenuItem("Ghi âm thanh hệ thống") { CheckOnClick = true, Checked = _systemAudioEnabled };
+        _systemAudioItem.Click += (_, _) => _systemAudioEnabled = _systemAudioItem.Checked;
+        menu.Items.Add(_systemAudioItem);
 
         menu.Items.Add(new ToolStripSeparator());
 
@@ -255,13 +261,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             _recorder.Resume();
             _borderOverlay?.SetPaused(false);
-            _trayIcon.ShowBalloonTip(1000, "Project Oculus", "Tiếp tục quay", ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(1000, "Capcap", "Tiếp tục quay", ToolTipIcon.Info);
         }
         else
         {
             _recorder.Pause();
             _borderOverlay?.SetPaused(true);
-            _trayIcon.ShowBalloonTip(1000, "Project Oculus", "Đã tạm dừng (Ctrl+P để tiếp tục)", ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(1000, "Capcap", "Đã tạm dừng (Ctrl+P để tiếp tục)", ToolTipIcon.Info);
         }
         UpdateUiState();
     }
@@ -286,6 +292,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             RegionBounds = _lastRegion,
             Fps = _selectedFps,
             RecordClickKeySounds = _soundsEnabled,
+            RecordSystemAudio = _systemAudioEnabled,
             CursorScale = _cursorScale
         };
 
@@ -295,14 +302,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Không thể bắt đầu quay:\n{ex.Message}", "Project Oculus",
+            MessageBox.Show($"Không thể bắt đầu quay:\n{ex.Message}", "Capcap",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
         UpdateUiState();
         StartBorderOverlayIfNeeded();
-        _trayIcon.ShowBalloonTip(1500, "Project Oculus",
+        _trayIcon.ShowBalloonTip(1500, "Capcap",
             $"Đang quay ({ModeLabels[_selectedMode]})... Ctrl+End để dừng, Ctrl+P để tạm dừng", ToolTipIcon.Info);
     }
 
@@ -362,8 +369,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ? $"Dừng quay  (Ctrl+End) - {ModeLabels[_selectedMode]}{(paused ? " [Tạm dừng]" : "")}"
             : "Bắt đầu quay  (Ctrl+Home)";
         _trayIcon.Text = recording
-            ? $"Project Oculus - {(paused ? "Tạm dừng" : "Đang quay")} ({ModeLabels[_selectedMode]})"
-            : "Project Oculus - Ctrl+Home bắt đầu, Ctrl+End dừng, Ctrl+P tạm dừng";
+            ? $"Capcap - {(paused ? "Tạm dừng" : "Đang quay")} ({ModeLabels[_selectedMode]})"
+            : "Capcap - Ctrl+Home bắt đầu, Ctrl+End dừng, Ctrl+P tạm dừng";
     }
 
     private void ExitApp()

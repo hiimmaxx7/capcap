@@ -1,14 +1,14 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace Oculus;
+namespace Capcap;
 
 /// <summary>Small "start recording this region?" confirmation shown right after a drag-select.</summary>
 internal sealed class ConfirmStartForm : Form
 {
     public ConfirmStartForm(Rectangle region)
     {
-        Text = "Project Oculus";
+        Text = "Capcap";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;

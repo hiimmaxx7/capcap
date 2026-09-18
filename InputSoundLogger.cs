@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Oculus;
+namespace Capcap;
 
 internal enum InputSoundKind { Click, Key, Scroll }
 
@@ -49,11 +49,12 @@ internal sealed class InputSoundLogger : IDisposable
 
     private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && (wParam == NativeMethods.WM_LBUTTONDOWN || wParam == NativeMethods.WM_RBUTTONDOWN))
+        int msg = wParam.ToInt32();
+        if (nCode >= 0 && (msg == NativeMethods.WM_LBUTTONDOWN || msg == NativeMethods.WM_RBUTTONDOWN))
         {
             lock (Events) Events.Add((_clock.Elapsed.TotalSeconds, InputSoundKind.Click));
         }
-        else if (nCode >= 0 && wParam == NativeMethods.WM_MOUSEWHEEL)
+        else if (nCode >= 0 && msg == NativeMethods.WM_MOUSEWHEEL)
         {
             lock (Events) Events.Add((_clock.Elapsed.TotalSeconds, InputSoundKind.Scroll));
         }
@@ -62,7 +63,8 @@ internal sealed class InputSoundLogger : IDisposable
 
     private IntPtr KeyHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && (wParam == NativeMethods.WM_KEYDOWN || wParam == NativeMethods.WM_SYSKEYDOWN))
+        int msg = wParam.ToInt32();
+        if (nCode >= 0 && (msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN))
         {
             lock (Events) Events.Add((_clock.Elapsed.TotalSeconds, InputSoundKind.Key));
         }

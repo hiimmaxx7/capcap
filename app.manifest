@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="1.0.0.0" name="ProjectOculus.app" type="win32" processorArchitecture="*"/>
+  <assemblyIdentity version="1.0.0.0" name="Capcap.app" type="win32" processorArchitecture="*"/>
 
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
@@ -16,7 +16,12 @@
     </application>
   </compatibility>
 
-  <!-- DPI awareness is set in code via Application.SetHighDpiMode to avoid
-       duplicating/conflicting with this manifest (WFAC010). -->
+  <asmv3:application xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
+    <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings"
+                           xmlns:dpi2="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
+      <dpiAware>true/PM</dpiAware>
+      <dpi2:dpiAwareness>PerMonitorV2</dpi2:dpiAwareness>
+    </asmv3:windowsSettings>
+  </asmv3:application>
 
 </assembly>

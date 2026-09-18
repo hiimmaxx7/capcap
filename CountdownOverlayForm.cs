@@ -1,7 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace Oculus;
+namespace Capcap;
 
 /// <summary>Big centered "3, 2, 1" shown over the target region before recording actually starts.
 /// It always closes before Recorder.Start() is called, so it never ends up in the video.</summary>

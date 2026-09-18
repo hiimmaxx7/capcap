@@ -1,7 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace Oculus;
+namespace Capcap;
 
 /// <summary>
 /// Click-through, always-on-top border drawn right at the edge of the capture

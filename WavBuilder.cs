@@ -1,4 +1,6 @@
-namespace Oculus;
+using System.Text;
+
+namespace Capcap;
 
 /// <summary>
 /// Synthesizes a small mono PCM16 WAV track: silence, with a short decaying
@@ -56,7 +58,7 @@ internal static class WavBuilder
             double value = amplitude * envelope * Math.Sin(2 * Math.PI * freq * t);
 
             int mixed = samples[idx] + (int)value;
-            samples[idx] = (short)Math.Clamp(mixed, short.MinValue, short.MaxValue);
+            samples[idx] = (short)Math.Min(short.MaxValue, Math.Max(short.MinValue, mixed));
         }
     }
 
@@ -71,11 +73,11 @@ internal static class WavBuilder
         using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
         using var bw = new BinaryWriter(fs);
 
-        bw.Write("RIFF"u8.ToArray());
+        bw.Write(Encoding.ASCII.GetBytes("RIFF"));
         bw.Write(36 + dataSize);
-        bw.Write("WAVE"u8.ToArray());
+        bw.Write(Encoding.ASCII.GetBytes("WAVE"));
 
-        bw.Write("fmt "u8.ToArray());
+        bw.Write(Encoding.ASCII.GetBytes("fmt "));
         bw.Write(16);
         bw.Write((short)1); // PCM
         bw.Write((short)channels);
@@ -84,7 +86,7 @@ internal static class WavBuilder
         bw.Write((short)blockAlign);
         bw.Write((short)bitsPerSample);
 
-        bw.Write("data"u8.ToArray());
+        bw.Write(Encoding.ASCII.GetBytes("data"));
         bw.Write(dataSize);
         foreach (var s in samples) bw.Write(s);
     }

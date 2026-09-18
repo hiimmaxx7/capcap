@@ -1,6 +1,6 @@
 using System.Windows.Forms;
 
-namespace Oculus;
+namespace Capcap;
 
 /// <summary>Invisible message-only window used to receive global WM_HOTKEY messages.</summary>
 internal sealed class HotkeyWindow : NativeWindow

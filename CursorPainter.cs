@@ -1,7 +1,7 @@
 using System.Drawing;
 using System.Runtime.InteropServices;
 
-namespace Oculus;
+namespace Capcap;
 
 /// <summary>
 /// Draws the real, currently-displayed system cursor onto a captured frame: correct

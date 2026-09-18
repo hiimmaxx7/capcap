@@ -2,7 +2,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace Oculus;
+namespace Capcap;
 
 /// <summary>Fullscreen click-drag overlay used to pick a rectangle region to record.</summary>
 internal sealed class RegionSelectForm : Form

@@ -2,10 +2,11 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace Oculus;
+namespace Capcap;
 
 internal enum CaptureMode
 {
@@ -22,12 +23,13 @@ internal sealed class RecordingOptions
     public int Fps = 60;
     public int Crf = 32;              // higher = smaller file, lower quality
     public bool RecordClickKeySounds = true;
+    public bool RecordSystemAudio = false; // WASAPI loopback (what's playing through speakers)
     public double CursorScale = 2.0;  // multiplier on top of the DPI-corrected cursor size
     public string OutputFolder = GetDefaultOutputFolder();
 
     public static string GetDefaultOutputFolder()
     {
-        string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "ProjectOculus");
+        string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "capcap");
         Directory.CreateDirectory(folder);
         return folder;
     }
@@ -67,10 +69,12 @@ internal sealed class Recorder
 
     private readonly Stopwatch _clock = new();
     private InputSoundLogger? _soundLogger;
+    private SystemAudioCapture? _systemAudioCapture;
     private RecordingOptions _opts = new();
 
     private string _tempVideoPath = "";
     private string _tempWavPath = "";
+    private string _tempSystemAudioPath = "";
 
     private readonly object _rectLock = new();
     private Rectangle _liveGrabRect;
@@ -137,7 +141,8 @@ internal sealed class Recorder
         Directory.CreateDirectory(opts.OutputFolder);
         _tempVideoPath = Path.Combine(opts.OutputFolder, $"_tmp_{stamp}.mp4");
         _tempWavPath = Path.Combine(opts.OutputFolder, $"_tmp_{stamp}.wav");
-        LastOutputPath = Path.Combine(opts.OutputFolder, $"ghi_{stamp}.mp4");
+        _tempSystemAudioPath = Path.Combine(opts.OutputFolder, $"_tmpsys_{stamp}.wav");
+        LastOutputPath = Path.Combine(opts.OutputFolder, $"capcap_{stamp}.mp4");
 
         StartFfmpeg(_outputSize, opts.Fps, opts.Crf, _tempVideoPath);
 
@@ -147,6 +152,12 @@ internal sealed class Recorder
         {
             _soundLogger = new InputSoundLogger(_clock);
             _soundLogger.Start();
+        }
+
+        if (opts.RecordSystemAudio)
+        {
+            _systemAudioCapture = new SystemAudioCapture(_tempSystemAudioPath);
+            _systemAudioCapture.Start();
         }
 
         _stopRequested = false;
@@ -171,12 +182,15 @@ internal sealed class Recorder
         _clock.Stop();
 
         _soundLogger?.Stop();
+        _systemAudioCapture?.Stop();
 
         try { _ffmpegStdin?.Flush(); } catch { /* ffmpeg may have already exited */ }
         try { _ffmpegStdin?.Close(); } catch { }
         try { _ffmpeg?.WaitForExit(15000); } catch { }
 
         double durationSec = Math.Max(0, _clock.Elapsed.TotalSeconds - _firstFrameOffsetSec);
+
+        var audioTracks = new List<string>();
 
         if (_opts.RecordClickKeySounds && _soundLogger is not null)
         {
@@ -188,9 +202,19 @@ internal sealed class Recorder
             var events = rawEvents.ConvertAll(e => (TimeSec: Math.Max(0, e.TimeSec - _firstFrameOffsetSec), e.Kind));
 
             WavBuilder.WriteEventTrack(_tempWavPath, durationSec, events);
-            MuxAudio(_tempVideoPath, _tempWavPath, LastOutputPath!);
+            audioTracks.Add(_tempWavPath);
+        }
+
+        if (_opts.RecordSystemAudio && File.Exists(_tempSystemAudioPath))
+        {
+            audioTracks.Add(_tempSystemAudioPath);
+        }
+
+        if (audioTracks.Count > 0)
+        {
+            MuxAudio(_tempVideoPath, audioTracks, LastOutputPath!);
             TryDelete(_tempVideoPath);
-            TryDelete(_tempWavPath);
+            foreach (var track in audioTracks) TryDelete(track);
         }
         else
         {
@@ -200,6 +224,8 @@ internal sealed class Recorder
 
         _soundLogger?.Dispose();
         _soundLogger = null;
+        _systemAudioCapture?.Dispose();
+        _systemAudioCapture = null;
         _ffmpeg?.Dispose();
         _ffmpeg = null;
         _ffmpegStdin = null;
@@ -218,6 +244,7 @@ internal sealed class Recorder
         // (pause-excluding) elapsed time stays correct for both audio-event timestamps
         // and the final duration used to size the WAV track.
         _clock.Stop();
+        _systemAudioCapture?.Pause();
     }
 
     public void Resume()
@@ -226,6 +253,7 @@ internal sealed class Recorder
         _paused = false;
         IsPaused = false;
         _clock.Start();
+        _systemAudioCapture?.Resume();
     }
 
     private void CaptureLoop(int fps)
@@ -381,7 +409,8 @@ internal sealed class Recorder
         _followCropLeft += step;
 
         int x = (int)Math.Round(_followCropLeft);
-        x = Math.Clamp(x, _screenClampBounds.Left, Math.Max(_screenClampBounds.Left, _screenClampBounds.Right - _outputSize.Width));
+        int maxX = Math.Max(_screenClampBounds.Left, _screenClampBounds.Right - _outputSize.Width);
+        x = Math.Min(maxX, Math.Max(_screenClampBounds.Left, x));
         return new Point(x, _screenClampBounds.Top);
     }
 
@@ -427,12 +456,27 @@ internal sealed class Recorder
         _ffmpegStdin = _ffmpeg.StandardInput.BaseStream;
     }
 
-    private static void MuxAudio(string videoPath, string wavPath, string outputPath)
+    private static void MuxAudio(string videoPath, List<string> audioPaths, string outputPath)
     {
+        string inputs = $"-i \"{videoPath}\" " + string.Join(" ", audioPaths.ConvertAll(p => $"-i \"{p}\""));
+
+        string audioMapArgs;
+        if (audioPaths.Count == 1)
+        {
+            audioMapArgs = "-c:a aac -b:a 128k -shortest";
+        }
+        else
+        {
+            // Multiple audio sources (e.g. click/key ticks + system audio loopback) —
+            // mix them into one track rather than only keeping the first.
+            string inputRefs = string.Join("", Enumerable.Range(1, audioPaths.Count).Select(i => $"[{i}:a]"));
+            audioMapArgs = $"-filter_complex \"{inputRefs}amix=inputs={audioPaths.Count}:duration=longest[aout]\" -map 0:v -map \"[aout]\" -c:a aac -b:a 128k";
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-y -i \"{videoPath}\" -i \"{wavPath}\" -c:v copy -c:a aac -b:a 128k -shortest \"{outputPath}\"",
+            Arguments = $"-y {inputs} -c:v copy {audioMapArgs} \"{outputPath}\"",
             UseShellExecute = false,
             CreateNoWindow = true
         };

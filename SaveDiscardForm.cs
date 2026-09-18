@@ -1,14 +1,14 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace Oculus;
+namespace Capcap;
 
 /// <summary>Shown right after a recording stops: keep the file, or throw it away.</summary>
 internal sealed class SaveDiscardForm : Form
 {
     public SaveDiscardForm(string path, long sizeBytes)
     {
-        Text = "Project Oculus";
+        Text = "Capcap";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
