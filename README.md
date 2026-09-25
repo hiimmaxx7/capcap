@@ -6,16 +6,18 @@ Tool quay màn hình siêu nhẹ cho Windows, chạy dạng icon khay hệ thố
 
 - **4 chế độ quay**: Toàn màn hình, Toàn màn hình (ẩn taskbar), Chọn vùng (kéo chuột), Dọc 9:16 bám theo con trỏ chuột.
 - **Chụp màn hình tăng tốc GPU** (DXGI) — mượt ở 60fps kể cả full màn hình độ phân giải cao.
-- **Con trỏ chuột thật** — đúng hình dạng và kích thước như hiển thị thật, có thể phóng to 1x–3x.
+- **Con trỏ chuột thật, nét** — đúng hình dạng, phóng to cố định ~2x cho dễ nhìn trong video (vẽ từ ảnh gốc cỡ lớn của bộ con trỏ, không kéo giãn nên không bị vỡ).
 - **File xuất ra rất nhẹ** — encode H.264 qua ffmpeg pipe trực tiếp.
-- **Âm thanh hiệu ứng click / gõ phím / cuộn chuột** (bật mặc định) và **âm thanh hệ thống** (tùy chọn).
+- **Âm thanh hiệu ứng click / gõ phím / cuộn chuột** bằng tiếng thu thật (bật mặc định) và **âm thanh hệ thống** (tùy chọn).
+- **Đếm ngược 3-2-1** trước khi quay ở mọi chế độ (`Ctrl+End` trong lúc đếm để hủy).
+- **Nhớ vùng chọn cuối** (ví dụ 608x1080 dọc 9:16) — lần sau chỉ cần click để dùng lại, Enter để dùng đúng vị trí cũ, giữ Shift khi kéo để giữ tỉ lệ.
 
 ## Phím tắt
 
 | Phím | Chức năng |
 |---|---|
 | `Ctrl+Home` | Bắt đầu quay |
-| `Ctrl+End` | Dừng quay |
+| `Ctrl+End` | Dừng quay (hoặc hủy khi đang đếm ngược) |
 | `Ctrl+P` | Tạm dừng / tiếp tục quay |
 | Bấm đúp vào icon khay hệ thống | Bắt đầu / dừng quay (dự phòng nếu phím tắt bị app khác chiếm) |
 
@@ -43,7 +45,7 @@ File chạy sau khi build: `bin\Release\net48\Capcap.exe` (kèm vài DLL của N
 
 1. Nếu chưa có ffmpeg, chạy `install-ffmpeg.bat` một lần (tự tải và thêm vào PATH), sau đó khởi động lại `Capcap.exe`.
 2. Chạy `Capcap.exe`, icon xuất hiện ở khay hệ thống (góc phải taskbar).
-3. Chuột phải vào icon để chọn chế độ quay, FPS (30/60), cỡ con trỏ, bật/tắt âm thanh hiệu ứng và âm thanh hệ thống.
+3. Chuột phải vào icon để chọn chế độ quay, FPS (30/60), bật/tắt âm thanh hiệu ứng và âm thanh hệ thống.
 4. `Ctrl+Home` để bắt đầu, `Ctrl+End` để dừng — sau khi dừng sẽ hỏi Lưu hay Xóa video.
 5. Video lưu tại `Videos\capcap` trong thư mục người dùng, tên file dạng `capcap_yyyyMMdd_HHmmss.mp4` (menu có mục "Mở thư mục lưu video").
 
@@ -55,7 +57,8 @@ File chạy sau khi build: `bin\Release\net48\Capcap.exe` (kèm vài DLL của N
 | `TrayApplicationContext.cs` | Icon khay hệ thống, menu, hotkey, điều phối luồng quay |
 | `Recorder.cs` | Engine chụp màn hình + pipe dữ liệu vào ffmpeg |
 | `CursorPainter.cs` | Vẽ con trỏ chuột thật (đúng hình dạng, kích thước theo DPI) |
-| `InputSoundLogger.cs` / `WavBuilder.cs` | Ghi lại thời điểm click/phím/cuộn và tổng hợp track hiệu ứng âm thanh |
+| `InputSoundLogger.cs` / `InputSoundBank.cs` / `WavBuilder.cs` | Ghi lại thời điểm click/phím/cuộn, nạp các file `Sounds\*.wav` (nhúng trong exe) và trộn thành track hiệu ứng |
+| `AppSettings.cs` | Lưu vùng chọn cuối vào `%AppData%\Capcap\settings.ini` |
 | `SystemAudioCapture.cs` | Ghi âm thanh hệ thống qua WASAPI loopback (NAudio) |
 | `DxgiScreenCapture.cs` | Chụp màn hình tăng tốc GPU qua DXGI Desktop Duplication |
 | `RegionSelectForm.cs` / `ConfirmStartForm.cs` / `CountdownOverlayForm.cs` / `SaveDiscardForm.cs` | Các popup UI trong luồng quay theo vùng |

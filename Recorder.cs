@@ -101,11 +101,16 @@ internal sealed class Recorder
         _cursorScale = opts.CursorScale;
         _frameIntervalSec = 1.0 / Math.Max(1, opts.Fps);
 
-        var startScreen = Screen.FromPoint(Cursor.Position);
+        // Region mode records on whichever monitor the picked region sits on, not wherever
+        // the cursor happens to be — DXGI duplicates exactly one monitor.
+        var startScreen = opts.Mode == CaptureMode.Region && opts.RegionBounds is { } picked
+            ? Screen.FromRectangle(picked)
+            : Screen.FromPoint(Cursor.Position);
 
         // DPI/pointer-size can't change mid-recording, so compute the cursor draw size
         // once here instead of querying it (MonitorFromPoint + GetDpiForMonitor) every frame.
         _cursorTargetSize = CursorPainter.ComputeTargetCursorSize(Cursor.Position, opts.CursorScale);
+        CursorPainter.PrepareSharpCursors(_cursorTargetSize);
 
         switch (opts.Mode)
         {
@@ -119,7 +124,9 @@ internal sealed class Recorder
                 break;
             case CaptureMode.Region:
                 if (opts.RegionBounds is null) throw new InvalidOperationException("RegionBounds is required for Region mode.");
-                _fixedGrabRect = MakeEven(opts.RegionBounds.Value);
+                var clipped = Rectangle.Intersect(opts.RegionBounds.Value, startScreen.Bounds);
+                if (clipped.Width < 2 || clipped.Height < 2) clipped = startScreen.Bounds;
+                _fixedGrabRect = MakeEven(clipped);
                 _isFollowMode = false;
                 break;
             case CaptureMode.Vertical9x16Follow:
@@ -199,6 +206,7 @@ internal sealed class Recorder
         if (!IsRecording) return;
         _stopRequested = true;
         _captureThread?.Join();
+        CursorPainter.ReleaseSharpCursors();
         _frameQueue?.CompleteAdding();
         _writerThread?.Join();
         _clock.Stop();
@@ -223,8 +231,16 @@ internal sealed class Recorder
             // point lines up with the video's actual first frame instead of Start().
             var events = rawEvents.ConvertAll(e => (TimeSec: Math.Max(0, e.TimeSec - _firstFrameOffsetSec), e.Kind));
 
-            WavBuilder.WriteEventTrack(_tempWavPath, durationSec, events);
-            audioTracks.Add(_tempWavPath);
+            try
+            {
+                WavBuilder.WriteEventTrack(_tempWavPath, durationSec, events);
+                audioTracks.Add(_tempWavPath);
+            }
+            catch
+            {
+                // A broken effects track shouldn't cost the user the video itself.
+                TryDelete(_tempWavPath);
+            }
         }
 
         if (_opts.RecordSystemAudio && File.Exists(_tempSystemAudioPath))

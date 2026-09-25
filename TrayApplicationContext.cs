@@ -16,7 +16,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private readonly Dictionary<CaptureMode, ToolStripMenuItem> _modeItems = new();
     private readonly Dictionary<int, ToolStripMenuItem> _fpsItems = new();
-    private readonly Dictionary<double, ToolStripMenuItem> _cursorScaleItems = new();
     private ToolStripMenuItem _toggleItem = null!;
     private ToolStripMenuItem _soundItem = null!;
     private ToolStripMenuItem _systemAudioItem = null!;
@@ -25,8 +24,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private int _selectedFps = 60;
     private bool _soundsEnabled = true;
     private bool _systemAudioEnabled = false;
-    private double _cursorScale = 2.0;
-    private Rectangle? _lastRegion;
+    private Rectangle? _lastRegion = AppSettings.LoadLastRegion();
+
+    private CountdownOverlayForm? _countdownOverlay;
+    private System.Windows.Forms.Timer? _countdownTimer;
+    private bool IsCountingDown => _countdownTimer is not null;
 
     private BorderOverlayForm? _borderOverlay;
     private System.Windows.Forms.Timer? _borderTimer;
@@ -92,13 +94,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         AddFpsItem(fpsMenu, 60);
         menu.Items.Add(fpsMenu);
 
-        var cursorMenu = new ToolStripMenuItem("Cỡ con trỏ chuột");
-        AddCursorScaleItem(cursorMenu, 1.0, "Thật (1x)");
-        AddCursorScaleItem(cursorMenu, 1.5, "1.5x");
-        AddCursorScaleItem(cursorMenu, 2.0, "2x (mặc định)");
-        AddCursorScaleItem(cursorMenu, 3.0, "3x");
-        menu.Items.Add(cursorMenu);
-
         _soundItem = new ToolStripMenuItem("Âm thanh khi click / gõ phím") { CheckOnClick = true, Checked = _soundsEnabled };
         _soundItem.Click += (_, _) => _soundsEnabled = _soundItem.Checked;
         menu.Items.Add(_soundItem);
@@ -146,21 +141,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         parent.DropDownItems.Add(item);
     }
 
-    private void AddCursorScaleItem(ToolStripMenuItem parent, double scale, string text)
-    {
-        var item = new ToolStripMenuItem(text) { Checked = scale == _cursorScale };
-        item.Click += (_, _) =>
-        {
-            _cursorScale = scale;
-            foreach (var kv in _cursorScaleItems) kv.Value.Checked = kv.Key == scale;
-        };
-        _cursorScaleItems[scale] = item;
-        parent.DropDownItems.Add(item);
-    }
-
     private void SelectMode(CaptureMode mode)
     {
-        if (_recorder.IsRecording) return;
+        if (_recorder.IsRecording || IsCountingDown) return;
 
         if (mode == CaptureMode.Region)
         {
@@ -176,7 +159,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void OnRegionPicked(Rectangle region)
     {
-        _lastRegion = region;
+        RememberRegion(region);
         _selectedMode = CaptureMode.Region;
         foreach (var kv in _modeItems) kv.Value.Checked = kv.Key == CaptureMode.Region;
 
@@ -186,35 +169,80 @@ internal sealed class TrayApplicationContext : ApplicationContext
         RunCountdownThenStart(region);
     }
 
+    private void RememberRegion(Rectangle region)
+    {
+        _lastRegion = region;
+        AppSettings.SaveLastRegion(region);
+    }
+
+    /// <summary>Shows 3-2-1 over the area about to be recorded, then starts. The overlay is
+    /// closed before Recorder.Start(), so it never ends up in the video.</summary>
     private void RunCountdownThenStart(Rectangle targetRegion)
     {
-        var overlay = new CountdownOverlayForm(targetRegion, 3);
-        overlay.Show();
+        if (IsCountingDown || _recorder.IsRecording) return;
+
+        _countdownOverlay = new CountdownOverlayForm(targetRegion, 3);
+        _countdownOverlay.Show();
         int remaining = 3;
 
-        var timer = new System.Windows.Forms.Timer { Interval = 1000 };
-        timer.Tick += (_, _) =>
+        _countdownTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _countdownTimer.Tick += (_, _) =>
         {
             remaining--;
             if (remaining <= 0)
             {
-                timer.Stop();
-                timer.Dispose();
-                overlay.Close();
-                overlay.Dispose();
+                EndCountdown();
                 StartRecording();
             }
             else
             {
-                overlay.SetCount(remaining);
+                _countdownOverlay?.SetCount(remaining);
             }
         };
-        timer.Start();
+        _countdownTimer.Start();
+        UpdateUiState();
+    }
+
+    private void EndCountdown()
+    {
+        _countdownTimer?.Stop();
+        _countdownTimer?.Dispose();
+        _countdownTimer = null;
+
+        _countdownOverlay?.Close();
+        _countdownOverlay?.Dispose();
+        _countdownOverlay = null;
+        UpdateUiState();
+    }
+
+    private void CancelCountdown()
+    {
+        if (!IsCountingDown) return;
+        EndCountdown();
+        _trayIcon.ShowBalloonTip(1000, "Capcap", "Đã hủy đếm ngược", ToolTipIcon.Info);
+    }
+
+    /// <summary>Where the 3-2-1 goes for the current mode: over the region, over the 9:16 strip
+    /// that will start centered on the cursor, or in the middle of the cursor's monitor.</summary>
+    private Rectangle CountdownTarget()
+    {
+        var screen = Screen.FromPoint(Cursor.Position).Bounds;
+        switch (_selectedMode)
+        {
+            case CaptureMode.Region when _lastRegion is { } region:
+                return region;
+            case CaptureMode.Vertical9x16Follow:
+                int w = Math.Min(screen.Width, (int)Math.Round(screen.Height * 9.0 / 16.0));
+                int x = Math.Max(screen.Left, Math.Min(screen.Right - w, Cursor.Position.X - w / 2));
+                return new Rectangle(x, screen.Top, w, screen.Height);
+            default:
+                return screen;
+        }
     }
 
     private bool TryPickRegion(out Rectangle region)
     {
-        using var form = new RegionSelectForm();
+        using var form = new RegionSelectForm(_lastRegion);
         var result = form.ShowDialog();
         if (result == DialogResult.OK && form.SelectedRegion.HasValue)
         {
@@ -233,7 +261,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 if (!_recorder.IsRecording) StartRecordingFlow();
                 break;
             case HOTKEY_STOP:
-                if (_recorder.IsRecording) StopRecording();
+                if (IsCountingDown) CancelCountdown();
+                else if (_recorder.IsRecording) StopRecording();
                 break;
             case HOTKEY_PAUSE:
                 TogglePause();
@@ -243,7 +272,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ToggleRecording()
     {
-        if (_recorder.IsRecording)
+        if (IsCountingDown)
+        {
+            CancelCountdown();
+        }
+        else if (_recorder.IsRecording)
         {
             StopRecording();
         }
@@ -274,14 +307,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void StartRecordingFlow()
     {
+        if (IsCountingDown) return;
+
         if (_selectedMode == CaptureMode.Region && _lastRegion is null)
         {
             if (!TryPickRegion(out var region)) return;
-            _lastRegion = region;
-            RunCountdownThenStart(region);
-            return;
+            RememberRegion(region);
         }
-        StartRecording();
+        RunCountdownThenStart(CountdownTarget());
     }
 
     private void StartRecording()
@@ -292,8 +325,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             RegionBounds = _lastRegion,
             Fps = _selectedFps,
             RecordClickKeySounds = _soundsEnabled,
-            RecordSystemAudio = _systemAudioEnabled,
-            CursorScale = _cursorScale
+            RecordSystemAudio = _systemAudioEnabled
         };
 
         try
@@ -367,7 +399,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _toggleItem.Text = recording
             ? $"Dừng quay  (Ctrl+End) - {ModeLabels[_selectedMode]}{(paused ? " [Tạm dừng]" : "")}"
-            : "Bắt đầu quay  (Ctrl+Home)";
+            : IsCountingDown
+                ? "Hủy đếm ngược  (Ctrl+End)"
+                : "Bắt đầu quay  (Ctrl+Home)";
         _trayIcon.Text = recording
             ? $"Capcap - {(paused ? "Tạm dừng" : "Đang quay")} ({ModeLabels[_selectedMode]})"
             : "Capcap - Ctrl+Home bắt đầu, Ctrl+End dừng, Ctrl+P tạm dừng";
@@ -375,6 +409,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ExitApp()
     {
+        EndCountdown();
         if (_recorder.IsRecording) StopRecording();
         NativeMethods.UnregisterHotKey(_hotkeyWindow.Handle, HOTKEY_START);
         NativeMethods.UnregisterHotKey(_hotkeyWindow.Handle, HOTKEY_STOP);

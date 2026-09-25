@@ -113,6 +113,18 @@ internal static class NativeMethods
     [DllImport("shcore.dll")]
     public static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
+    public const uint IMAGE_CURSOR = 2;
+    public const uint LR_LOADFROMFILE = 0x00000010;
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr LoadImage(IntPtr hinst, string name, uint type, int cx, int cy, uint fuLoad);
+
+    [DllImport("user32.dll")]
+    public static extern bool DestroyCursor(IntPtr hCursor);
+
     [DllImport("gdi32.dll")]
     public static extern int GetObject(IntPtr hgdiobj, int cbBuffer, ref BITMAP bm);
 }

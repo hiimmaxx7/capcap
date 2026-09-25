@@ -19,4 +19,10 @@
     <PackageReference Include="Vortice.Direct3D11" Version="1.6.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Sounds\click.wav" LogicalName="Capcap.Sounds.click.wav" />
+    <EmbeddedResource Include="Sounds\typing.wav" LogicalName="Capcap.Sounds.typing.wav" />
+    <EmbeddedResource Include="Sounds\scroll.wav" LogicalName="Capcap.Sounds.scroll.wav" />
+  </ItemGroup>
+
 </Project>

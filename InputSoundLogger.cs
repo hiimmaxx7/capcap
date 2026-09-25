@@ -6,7 +6,7 @@ internal enum InputSoundKind { Click, Key, Scroll }
 
 /// <summary>
 /// Global low-level mouse/keyboard hooks used only to log timestamps of clicks
-/// and keystrokes while recording, so a short synthetic "tick" sound can be
+/// and keystrokes while recording, so the matching click/typing/scroll sample can be
 /// mixed into the output audio track (no system audio / mic is captured).
 /// Must be started/stopped from the thread that owns the app's message loop.
 /// </summary>
