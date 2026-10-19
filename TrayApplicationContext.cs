@@ -351,6 +351,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         StopBorderOverlay();
         UpdateUiState();
 
+        if (_recorder.LastFailureReason is { } reason)
+        {
+            MessageBox.Show($"Video không được lưu vì không ghi được hình:\n{reason}", "Capcap",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
         if (_recorder.LastOutputPath is { } path && File.Exists(path))
         {
             long size = new FileInfo(path).Length;

@@ -45,6 +45,8 @@ internal sealed class Recorder
     public bool IsRecording { get; private set; }
     public bool IsPaused { get; private set; }
     public string? LastOutputPath { get; private set; }
+    /// <summary>Set by Stop() when no video frame reached ffmpeg, so no file was saved.</summary>
+    public string? LastFailureReason { get; private set; }
 
     private volatile bool _paused;
     private Thread? _captureThread;
@@ -67,6 +69,9 @@ internal sealed class Recorder
     private int _bytesPerPixel = 3;
 
     private double _followCropLeft;
+
+    private long _framesWritten;
+    private volatile string? _captureError;
 
     private volatile bool _firstFrameSeen;
     private double _firstFrameOffsetSec;
@@ -190,6 +195,13 @@ internal sealed class Recorder
         }
 
         _stopRequested = false;
+        // A previous session stopped while paused would otherwise leave the capture loop
+        // parked in its pause branch forever — the next recording got no video frames at all.
+        _paused = false;
+        IsPaused = false;
+        _framesWritten = 0;
+        _captureError = null;
+        LastFailureReason = null;
         _firstFrameSeen = false;
         _firstFrameOffsetSec = 0;
         IsRecording = true;
@@ -219,6 +231,19 @@ internal sealed class Recorder
         try { _ffmpeg?.WaitForExit(15000); } catch { }
 
         double durationSec = Math.Max(0, _clock.Elapsed.TotalSeconds - _firstFrameOffsetSec);
+
+        if (Interlocked.Read(ref _framesWritten) == 0)
+        {
+            // Muxing an empty video with the tick track produced an audio-only .mp4 that
+            // players refuse to open without a sound device — report the failure instead.
+            TryDelete(_tempVideoPath);
+            TryDelete(_tempWavPath);
+            TryDelete(_tempSystemAudioPath);
+            LastFailureReason = _captureError ?? "Không ghi được khung hình nào.";
+            LastOutputPath = null;
+            Cleanup();
+            return;
+        }
 
         var audioTracks = new List<string>();
 
@@ -260,6 +285,11 @@ internal sealed class Recorder
             File.Move(_tempVideoPath, LastOutputPath!);
         }
 
+        Cleanup();
+    }
+
+    private void Cleanup()
+    {
         _soundLogger?.Dispose();
         _soundLogger = null;
         _systemAudioCapture?.Dispose();
@@ -272,6 +302,8 @@ internal sealed class Recorder
         _frameQueue?.Dispose();
         _frameQueue = null;
         _bufferPool = null;
+        _paused = false;
+        IsPaused = false;
         IsRecording = false;
     }
 
@@ -372,9 +404,10 @@ internal sealed class Recorder
                     framesSent++;
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // ffmpeg pipe closed or capture hiccup — stop cleanly instead of crashing the app.
+                _captureError = $"Lỗi chụp màn hình ({(_useDxgi ? "DXGI" : "GDI")}): {ex.Message}";
                 _stopRequested = true;
             }
         }
@@ -399,6 +432,7 @@ internal sealed class Recorder
                 try
                 {
                     _ffmpegStdin!.Write(buffer, 0, buffer.Length);
+                    Interlocked.Increment(ref _framesWritten);
                 }
                 catch
                 {
