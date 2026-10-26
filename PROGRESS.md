@@ -38,6 +38,8 @@ Nhật ký phát triển. Đọc file này trước khi đổi hành vi quay/UI 
 - **Giới hạn thời lượng quay tối đa (auto-stop sau N giây)**: từng hiểu nhầm yêu cầu "mặc định 30s" theo hướng này — thực ra ý người dùng là "mặc định 30fps" (đã hỏi lại và xác nhận). Không có tính năng giới hạn thời lượng.
 - **Repo public + GitHub Release**: đã đổi repo `capcap` sang public, đóng gói `bin\Release\net48\*` (trừ .pdb) thành zip đính kèm GitHub Release để người khác tải về dùng ngay không cần build.
 
+- **File toạ độ chuột `.mouse.json` (2026-10-26)**: ô "Ghi toạ độ chuột" trong menu khay, MẶC ĐỊNH BẬT, lưu ở `settings.ini` (`RecordMouse=0/1`; `AppSettings` giờ giữ nguyên mọi khoá khi lưu — trước đó `SaveLastRegion` ghi đè cả file). Mỗi khung chụp thật ghi `[t, x, y, down]` với x,y đã trừ `grabOrigin` (toạ độ trong khung video, đúng cả chế độ Chọn vùng và 9:16 bám chuột), t = số khung đã đẩy / fps (không lệch sau tạm dừng), down = nút trái/phải đang giữ (`GetAsyncKeyState`, không phụ thuộc hook âm thanh). Xuất `capcap_<giờ>.mouse.json` cạnh mp4 (`{"fps","w","h","s":[[t,x,y,d],...]}`, ~70KB/phút ở 60fps); Xoá ở popup thì xoá cả hai. Dùng cho glow chuột khi dựng Remotion (`styles/glow-icon.md`). Chưa quay thử trên máy thật khi commit (build sạch).
+
 ## Việc còn để ngỏ / có thể cần theo dõi tiếp
 
 - Ctrl+Home/Ctrl+End/Ctrl+P chiếm dụng phím tắt toàn hệ thống (trùng chức năng mặc định ở nhiều app khác: về đầu/cuối văn bản, In). Người dùng đã được nhắc, chưa yêu cầu đổi.

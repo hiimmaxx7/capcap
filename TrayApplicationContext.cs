@@ -24,6 +24,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private int _selectedFps = 60;
     private bool _soundsEnabled = true;
     private bool _systemAudioEnabled = false;
+    private bool _mouseTrackEnabled = AppSettings.LoadRecordMouse();
+    private ToolStripMenuItem _mouseTrackItem = null!;
     private Rectangle? _lastRegion = AppSettings.LoadLastRegion();
 
     private CountdownOverlayForm? _countdownOverlay;
@@ -101,6 +103,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _systemAudioItem = new ToolStripMenuItem("Ghi âm thanh hệ thống") { CheckOnClick = true, Checked = _systemAudioEnabled };
         _systemAudioItem.Click += (_, _) => _systemAudioEnabled = _systemAudioItem.Checked;
         menu.Items.Add(_systemAudioItem);
+
+        _mouseTrackItem = new ToolStripMenuItem("Ghi toạ độ chuột (file .mouse.json)") { CheckOnClick = true, Checked = _mouseTrackEnabled };
+        _mouseTrackItem.Click += (_, _) => { _mouseTrackEnabled = _mouseTrackItem.Checked; AppSettings.SaveRecordMouse(_mouseTrackEnabled); };
+        menu.Items.Add(_mouseTrackItem);
 
         menu.Items.Add(new ToolStripSeparator());
 
@@ -325,7 +331,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             RegionBounds = _lastRegion,
             Fps = _selectedFps,
             RecordClickKeySounds = _soundsEnabled,
-            RecordSystemAudio = _systemAudioEnabled
+            RecordSystemAudio = _systemAudioEnabled,
+            RecordMouseTrack = _mouseTrackEnabled
         };
 
         try
@@ -366,6 +373,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             if (result != DialogResult.OK)
             {
                 try { File.Delete(path); } catch { }
+                if (_recorder.LastMouseTrackPath is { } mt) { try { File.Delete(mt); } catch { } }
             }
         }
     }

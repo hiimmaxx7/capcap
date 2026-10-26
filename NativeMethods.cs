@@ -21,6 +21,8 @@ internal static class NativeMethods
     public const uint MOD_ALT = 0x0001;
     public const uint MOD_NOREPEAT = 0x4000;
 
+    public const int VK_LBUTTON = 0x01;
+    public const int VK_RBUTTON = 0x02;
     public const int VK_HOME = 0x24;
     public const int VK_END = 0x23;
 
@@ -31,6 +33,9 @@ internal static class NativeMethods
     public const int SM_CYCURSOR = 14;
     public const uint MONITOR_DEFAULTTONEAREST = 2;
     public const int MDT_EFFECTIVE_DPI = 0;
+
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct BITMAP

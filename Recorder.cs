@@ -23,6 +23,7 @@ internal sealed class RecordingOptions
     public int Fps = 60;
     public int Crf = 32;              // higher = smaller file, lower quality
     public bool RecordClickKeySounds = true;
+    public bool RecordMouseTrack = true;   // write capcap_<stamp>.mouse.json next to the video
     public bool RecordSystemAudio = false; // WASAPI loopback (what's playing through speakers)
     public double CursorScale = 2.0;  // multiplier on top of the DPI-corrected cursor size
     public string OutputFolder = GetDefaultOutputFolder();
@@ -78,6 +79,10 @@ internal sealed class Recorder
 
     private readonly Stopwatch _clock = new();
     private InputSoundLogger? _soundLogger;
+    // Cursor track (video-frame pixel coords) for the .mouse.json sidecar; time = frame index / fps.
+    private readonly List<(double T, int X, int Y, int Down)> _mouseTrack = new();
+    private long _timelineFrames;
+    public string? LastMouseTrackPath { get; private set; }
     private SystemAudioCapture? _systemAudioCapture;
     private RecordingOptions _opts = new();
 
@@ -204,6 +209,9 @@ internal sealed class Recorder
         LastFailureReason = null;
         _firstFrameSeen = false;
         _firstFrameOffsetSec = 0;
+        _mouseTrack.Clear();
+        _timelineFrames = 0;
+        LastMouseTrackPath = null;
         IsRecording = true;
 
         _writerThread = new Thread(WriterLoop) { IsBackground = true, Name = "FfmpegWriterLoop" };
@@ -284,6 +292,8 @@ internal sealed class Recorder
             TryDelete(LastOutputPath!);
             File.Move(_tempVideoPath, LastOutputPath!);
         }
+
+        if (_opts.RecordMouseTrack && _mouseTrack.Count > 0) WriteMouseTrack(LastOutputPath!);
 
         Cleanup();
     }
@@ -388,6 +398,7 @@ internal sealed class Recorder
                     _firstFrameOffsetSec = _clock.Elapsed.TotalSeconds;
                 }
 
+                if (_opts.RecordMouseTrack) SampleMouse(grabOrigin);
                 EnqueueFrame(buffer);
                 framesSent++;
 
@@ -415,6 +426,7 @@ internal sealed class Recorder
 
     private void EnqueueFrame(byte[] buffer)
     {
+        _timelineFrames++;
         // Encoding can't keep up right now — drop this frame rather than block and let
         // capture timing (and therefore playback smoothness) fall behind.
         if (!_frameQueue!.TryAdd(buffer))
@@ -496,6 +508,44 @@ internal sealed class Recorder
         int maxX = Math.Max(_screenClampBounds.Left, _screenClampBounds.Right - _outputSize.Width);
         x = Math.Min(maxX, Math.Max(_screenClampBounds.Left, x));
         return new Point(x, _screenClampBounds.Top);
+    }
+
+    private void SampleMouse(Point grabOrigin)
+    {
+        var p = Cursor.Position;
+        bool down = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0
+                 || (NativeMethods.GetAsyncKeyState(NativeMethods.VK_RBUTTON) & 0x8000) != 0;
+        _mouseTrack.Add((_timelineFrames / (double)Math.Max(1, _opts.Fps), p.X - grabOrigin.X, p.Y - grabOrigin.Y, down ? 1 : 0));
+    }
+
+    /// <summary>Sidecar for the editor: cursor position per captured frame in the video's own pixel space
+    /// (already minus the crop origin, so fixed-region and 9:16-follow modes both line up), plus left/right
+    /// button state. s = [t seconds, x, y, down].</summary>
+    private void WriteMouseTrack(string videoPath)
+    {
+        try
+        {
+            string path = Path.ChangeExtension(videoPath, null) + ".mouse.json";
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{\"fps\":").Append(_opts.Fps)
+              .Append(",\"w\":").Append(_outputSize.Width)
+              .Append(",\"h\":").Append(_outputSize.Height)
+              .Append(",\"s\":[");
+            for (int i = 0; i < _mouseTrack.Count; i++)
+            {
+                var m = _mouseTrack[i];
+                if (i > 0) sb.Append(',');
+                sb.Append('[').Append(m.T.ToString("0.###", inv)).Append(',').Append(m.X).Append(',').Append(m.Y).Append(',').Append(m.Down).Append(']');
+            }
+            sb.Append("]}");
+            File.WriteAllText(path, sb.ToString(), new System.Text.UTF8Encoding(false));
+            LastMouseTrackPath = path;
+        }
+        catch
+        {
+            // A missing sidecar must never cost the user the video.
+        }
     }
 
     /// <summary>Composites the real cursor directly into a tightly-packed BGRA32 buffer
